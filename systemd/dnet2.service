@@ -1,0 +1,23 @@
+[Unit]
+Description=DNET2 XDP/TC redundant Ethernet prototype
+Documentation=file:/usr/local/share/doc/dnet2-bpf/README.md
+After=network-pre.target
+Before=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/dnet2/dnet2.conf
+ExecStart=/usr/local/sbin/dnet2d -r ${DNET2_RX_OBJECT} -t ${DNET2_TX_OBJECT} ${DNET2_IFACE_A} ${DNET2_IFACE_B}
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=10
+CapabilityBoundingSet=CAP_BPF CAP_NET_ADMIN CAP_PERFMON CAP_SYS_ADMIN
+AmbientCapabilities=CAP_BPF CAP_NET_ADMIN CAP_PERFMON CAP_SYS_ADMIN
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
