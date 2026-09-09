@@ -30,10 +30,14 @@ build:
 build/%.bpf.o: bpf/%.bpf.c include/dnet2_shared.h | build
 	$(CLANG) $(BPF_CFLAGS) -c $< -o $@
 
-build/dnet2d: src/dnet2d.c include/dnet2_shared.h | build
-	$(CC) $(USER_CFLAGS) $< -o $@ $(USER_LIBS)
+build/dnet2d: src/dnet2d.c src/virtual.c src/virtual.h include/dnet2_shared.h | build
+	$(CC) $(USER_CFLAGS) src/dnet2d.c src/virtual.c -o $@ $(USER_LIBS)
 
-check: all
+build/virtual_test: tests/virtual_test.c src/virtual.c src/virtual.h | build
+	$(CC) $(USER_CFLAGS) $< -o $@
+
+check: all build/virtual_test
+	./build/virtual_test
 	$(CLANG) --version | head -1
 	$(PKG_CONFIG) --modversion libbpf
 	file $(BPF_OBJECTS) build/dnet2d

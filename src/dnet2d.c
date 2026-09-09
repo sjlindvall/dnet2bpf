@@ -11,6 +11,7 @@
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
 #include "dnet2_shared.h"
+#include "virtual.h"
 
 static volatile sig_atomic_t exiting;
 static int ifa, ifb;
@@ -190,7 +191,7 @@ static void print_stats(void)
 static void usage(const char *p)
 {
     fprintf(stderr, 
-            "Usage: %s [-r rx-object] [-t tx-object] IFACE_A IFACE_B\n",
+            "Usage: %s [-r rx-object] [-t tx-object] [-v TAP] [-a 172.23.x.y/PREFIX] IFACE_A IFACE_B\n",
             p
     );
 }
@@ -199,12 +200,19 @@ int main(int argc, char **argv)
 {
     const char *rx_path = "/usr/local/lib/dnet2-bpf/dnet2_rx.bpf.o";
     const char *tx_path = "/usr/local/lib/dnet2-bpf/dnet2_tx.bpf.o";
+    const char *tap_name = NULL, *tap_cidr = "172.23.1.1/16";
     struct bpf_program *rx_prog, *tx_prog;
     struct dnet2_config cfg = {};
     int opt, err, rx_fd, tx_fd;
 
-    while ((opt = getopt(argc, argv, "r:t:h")) != -1) {
-        if (opt == 'r')
+    while ((opt = getopt(argc, argv, "r:t:v:a:h")) != -1) {
+        if (opt == 'v')
+            tap_name = optarg;
+        else if (opt == 'a') {
+            tap_cidr = optarg;
+            if (!tap_name) tap_name = "dnet2";
+        }
+        else if (opt == 'r')
             rx_path = optarg;
 	else if (opt == 't')
             tx_path = optarg;
@@ -225,6 +233,15 @@ int main(int argc, char **argv)
     if (!ifa || !ifb || ifa == ifb) {
         fprintf(stderr, "Invalid or identical interfaces\n");
         return 2;
+    }
+
+    if (tap_name) {
+        signal(SIGINT, on_signal);
+        signal(SIGTERM, on_signal);
+        err = dnet2_virtual_run(tap_name, tap_cidr, argv[optind],
+                               argv[optind + 1], &exiting);
+        if (err) fprintf(stderr, "dnet2d: %s\n", strerror(-err));
+        return err ? 1 : 0;
     }
 
     cfg.ifindex_a = ifa;
