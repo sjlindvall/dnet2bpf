@@ -128,6 +128,19 @@ journalctl -u dnet2 -f
 The default configuration is `ens19`/`ens20`; change it before starting the
 service on a machine with different interface names.
 
+## Manual pages
+
+`make install` installs `dnet2d(8)` and `dnet2.conf(5)`. Read them with:
+
+```sh
+man 8 dnet2d
+man 5 dnet2.conf
+```
+
+Preview from the source tree with `man -l man/dnet2d.8` or
+`man -l man/dnet2.conf.5`. Override `MANDIR` to change the installation directory
+(default: `$(PREFIX)/share/man`).
+
 ## Uninstall
 
 ```sh

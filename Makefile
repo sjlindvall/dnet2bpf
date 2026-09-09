@@ -1,5 +1,6 @@
 PREFIX ?= /usr/local
 SBINDIR ?= $(PREFIX)/sbin
+MANDIR ?= $(PREFIX)/share/man
 SYSCONFDIR ?= /etc
 SYSTEMD_DIR ?= /etc/systemd/system
 DESTDIR ?=
@@ -48,6 +49,9 @@ install: all
 	install -m 0755 build/dnet2d $(DESTDIR)$(SBINDIR)/dnet2d
 	install -m 0644 $(BPF_OBJECTS) $(DESTDIR)$(PREFIX)/lib/dnet2-bpf/
 	install -m 0644 README.md $(DESTDIR)$(PREFIX)/share/doc/dnet2-bpf/README.md
+	install -d $(DESTDIR)$(MANDIR)/man8 $(DESTDIR)$(MANDIR)/man5
+	install -m 0644 man/dnet2d.8 $(DESTDIR)$(MANDIR)/man8/dnet2d.8
+	install -m 0644 man/dnet2.conf.5 $(DESTDIR)$(MANDIR)/man5/dnet2.conf.5
 	install -d $(DESTDIR)$(SYSCONFDIR)/dnet2
 	@if [ ! -e $(DESTDIR)$(SYSCONFDIR)/dnet2/dnet2.conf ]; then \
 		install -m 0644 config/dnet2.conf $(DESTDIR)$(SYSCONFDIR)/dnet2/dnet2.conf; \
@@ -66,6 +70,8 @@ uninstall:
 	rm -f $(DESTDIR)$(SYSTEMD_DIR)/dnet2.service
 	rm -f $(DESTDIR)$(PREFIX)/share/doc/dnet2-bpf/README.md
 	rmdir $(DESTDIR)$(PREFIX)/share/doc/dnet2-bpf 2>/dev/null || true
+	rm -f $(DESTDIR)$(MANDIR)/man8/dnet2d.8
+	rm -f $(DESTDIR)$(MANDIR)/man5/dnet2.conf.5
 	@echo "Configuration retained at $(SYSCONFDIR)/dnet2/dnet2.conf"
 
 clean:

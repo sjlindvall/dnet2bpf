@@ -1,6 +1,6 @@
 [Unit]
 Description=DNET2 XDP/TC redundant Ethernet prototype
-Documentation=file:/usr/local/share/doc/dnet2-bpf/README.md
+Documentation=man:dnet2d(8) man:dnet2.conf(5) file:/usr/local/share/doc/dnet2-bpf/README.md
 After=network-pre.target
 Before=network.target
 

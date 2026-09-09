@@ -1,0 +1,105 @@
+.TH DNET2.CONF 5 "September 2026" "dnet2-bpf" "File Formats"
+.SH NAME
+dnet2.conf \- settings for the dnet2 systemd service
+.SH DESCRIPTION
+.I /etc/dnet2/dnet2.conf
+is an EnvironmentFile read by the supplied
+.B dnet2.service
+unit.
+It supplies command-line arguments to
+.BR dnet2d (8).
+The daemon does not read this file when invoked directly.
+.SH FORMAT
+Use one VARIABLE=value assignment per line.
+Blank lines and comment lines beginning with a hash sign are permitted.
+Quote values containing spaces, as shown below.
+This file is not a shell script: do not use shell commands, command
+substitution, or depend on shell variable expansion.
+See
+.BR systemd.exec (5)
+for the full EnvironmentFile syntax.
+.SH SETTINGS
+.TP
+.B DNET2_IFACE_A
+Physical interface for network A.
+Shipped value: ens19.
+.TP
+.B DNET2_IFACE_B
+Physical interface for network B.
+Shipped value: ens20.
+A and B must be distinct existing interfaces; do not use the management NIC.
+In TAP mode, bring both links up before starting the service.
+.TP
+.B DNET2_VIRTUAL_OPTIONS
+Optional TAP command-line arguments.
+Shipped value: "\-v dnet2".
+This creates adapter dnet2 with default address 172.23.1.1/16.
+Add \-a address/prefix to override the startup address.
+An empty or absent value selects legacy BPF cloning mode.
+The service expands this value into separate arguments.
+.TP
+.B DNET2_RX_OBJECT
+Legacy RX BPF object path.
+Shipped value: /usr/local/lib/dnet2-bpf/dnet2_rx.bpf.o.
+Ignored in TAP mode.
+.TP
+.B DNET2_TX_OBJECT
+Legacy TX BPF object path.
+Shipped value: /usr/local/lib/dnet2-bpf/dnet2_tx.bpf.o.
+Ignored in TAP mode.
+.SH EXAMPLES
+Default topology: virtual network 172.23.0.0/16 carried over A on 172.21.*
+and B on 172.22.*:
+.PP
+.nf
+DNET2_IFACE_A=ens19
+DNET2_IFACE_B=ens20
+DNET2_VIRTUAL_OPTIONS="\-v dnet2"
+DNET2_RX_OBJECT=/usr/local/lib/dnet2-bpf/dnet2_rx.bpf.o
+DNET2_TX_OBJECT=/usr/local/lib/dnet2-bpf/dnet2_tx.bpf.o
+.fi
+.PP
+Choose a different virtual host address:
+.PP
+.nf
+DNET2_VIRTUAL_OPTIONS="\-v dnet2 \-a 172.23.1.2/16"
+.fi
+.PP
+Select legacy mode:
+.PP
+.nf
+DNET2_VIRTUAL_OPTIONS=
+.fi
+.SH APPLYING CHANGES
+Restart the service after editing this file:
+.PP
+.nf
+sudo systemctl restart dnet2
+systemctl status dnet2
+journalctl \-u dnet2 \-f
+.fi
+.PP
+A daemon-reload is needed when the service unit changes, not for changes to
+this environment file alone.
+Restarting removes and recreates the TAP, discarding runtime adapter changes.
+Use
+.BR ip (8)
+for temporary configuration while the daemon is running.
+.PP
+Installation preserves an existing configuration file.
+When upgrading an older installation, add DNET2_VIRTUAL_OPTIONS explicitly
+to enable the virtual adapter.
+Uninstallation retains this file.
+.SH NOTES
+Use a unique virtual address for each host.
+The daemon does not assign 172.21.* or 172.22.* addresses to the physical
+interfaces; configure them through the host's normal network tools.
+See
+.BR dnet2d (8)
+for transport limitations, required privileges, and recovery procedures.
+.SH SEE ALSO
+.BR dnet2d (8),
+.BR systemd.exec (5),
+.BR systemd.service (5),
+.BR systemctl (1),
+.BR ip (8)

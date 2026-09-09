@@ -1,0 +1,194 @@
+.TH DNET2D 8 "September 2026" "dnet2-bpf" "System Administration"
+.SH NAME
+dnet2d \- transport an IPv4 virtual network over two Ethernet LANs
+.SH SYNOPSIS
+.B dnet2d
+.RB [ \-r " rx-object" ]
+.RB [ \-t " tx-object" ]
+.RB [ \-v " tap-name" ]
+.RB [ \-a " address/prefix" ]
+.I IFACE_A IFACE_B
+.br
+.B dnet2d \-h
+.SH DESCRIPTION
+.B dnet2d
+runs in the foreground and provides two alternative prototype data paths.
+The two physical interfaces must exist and be distinct.
+Do not select the management or SSH interface.
+.SS Virtual adapter mode
+Either
+.B \-v
+or
+.B \-a
+enables TAP mode.
+The daemon creates a nonpersistent Ethernet TAP adapter with default IPv4
+address 172.23.1.1/16.
+Applications reach the overlay through the adapter's connected route.
+For the intended topology, interface A is on 172.21.* and interface B is on
+172.22.*; their addresses and routes are not changed.
+Both physical links must already be up.
+.PP
+Outbound IPv4 frames with a 172.23.* source and Ethernet/IPv4 ARP frames
+targeting 172.23.* are sent unchanged on both links.
+Incoming IPv4 frames targeting 172.23.*, and IPv4 broadcast or multicast
+frames from 172.23.* sources, are eligible for delivery to the TAP.
+Incoming ARP must target 172.23.*.
+Incoming frames must also be addressed to the TAP MAC, broadcast, or multicast.
+Locally transmitted frames and reflected frames with the TAP source MAC are
+ignored.
+There is no NAT or IP encapsulation.
+.PP
+Use normal Linux tools such as
+.BR ip (8)
+to configure the adapter while the daemon runs.
+The transport filter remains 172.23.0.0/16 after address changes.
+Initial MTU is the smaller physical MTU, capped at 1500.
+Keep subsequent MTU changes within both physical links' limits.
+The daemon refuses to adopt an existing adapter.
+The kernel removes the TAP when the daemon closes it or exits, including
+on a crash; runtime configuration is therefore not persistent.
+.PP
+TAP mode does not load or attach BPF programs.
+Stop any old daemon and remove stale legacy BPF attachments before switching
+modes.
+Packet sockets request promiscuous reception on A and B for their lifetime.
+Switches and hypervisors must allow the TAP MAC on those links.
+.SS Legacy BPF mode
+Without
+.B \-v
+or
+.BR \-a ,
+the daemon attaches generic/SKB XDP counters and TC egress classifiers to A
+and B.
+XDP passes all received traffic.
+TC clones every outbound Ethernet frame to the other interface, including
+ARP and IPv6, using a temporary packet mark to prevent clone recursion.
+Counters are printed every two seconds.
+Existing XDP programs are not replaced.
+Existing clsact qdiscs are preserved.
+.SH OPTIONS
+.TP
+.BI \-v " tap-name"
+Enable TAP mode with the given adapter name.
+The name must be unused, shorter than IFNAMSIZ, and contain no percent sign.
+.TP
+.BI \-a " address/prefix"
+Set the TAP startup IPv4 address.
+The address must be a host address in 172.23.0.0/16 with prefix length
+16 through 30; network and broadcast addresses are rejected.
+Default: 172.23.1.1/16.
+This option also enables TAP mode, using the name
+.B dnet2
+unless overridden by
+.BR \-v .
+Use a unique address on each host.
+.TP
+.BI \-r " rx-object"
+Legacy mode RX BPF object.
+Default: /usr/local/lib/dnet2-bpf/dnet2_rx.bpf.o.
+Ignored in TAP mode.
+.TP
+.BI \-t " tx-object"
+Legacy mode TX BPF object.
+Default: /usr/local/lib/dnet2-bpf/dnet2_tx.bpf.o.
+Ignored in TAP mode.
+.TP
+.B \-h
+Print usage and exit successfully.
+.SH CONFIGURATION
+The daemon reads command-line arguments, not a configuration file.
+The supplied systemd service reads
+.I /etc/dnet2/dnet2.conf
+and passes its settings as arguments; see
+.BR dnet2.conf (5).
+The shipped service configuration enables TAP mode with name
+.B dnet2
+and address 172.23.1.1/16.
+.SH PRIVILEGES
+TAP mode requires /dev/net/tun, CAP_NET_ADMIN, and CAP_NET_RAW.
+Legacy BPF mode requires privileges to load BPF programs and attach XDP/TC
+hooks; the supplied service grants CAP_BPF, CAP_PERFMON, CAP_NET_ADMIN,
+and CAP_SYS_ADMIN as well as CAP_NET_RAW.
+Running manually as root is supported.
+.SH SIGNALS
+SIGINT and SIGTERM request shutdown.
+TAP mode closes its sockets and adapter.
+Legacy mode detaches its XDP programs if still current, removes its TC
+filters, and removes clsact qdiscs it created.
+A legacy-mode crash can leave attachments behind.
+.SH EXIT STATUS
+.TP
+.B 0
+Normal shutdown or help requested.
+.TP
+.B 1
+Startup or runtime failure, including invalid TAP configuration.
+.TP
+.B 2
+Invalid command-line syntax, missing arguments, or invalid or identical
+physical interfaces.
+.SH EXAMPLES
+Create the default-address virtual adapter:
+.PP
+.nf
+sudo ./build/dnet2d \-v dnet2 ens19 ens20
+.fi
+.PP
+Use another host address:
+.PP
+.nf
+sudo ./build/dnet2d \-v dnet2 \-a 172.23.1.2/16 ens19 ens20
+ip addr show dev dnet2
+ping \-I dnet2 172.23.1.1
+.fi
+.PP
+Run legacy BPF mode using locally built objects:
+.PP
+.nf
+sudo ./build/dnet2d \-r build/dnet2_rx.bpf.o \e
+    \-t build/dnet2_tx.bpf.o ens19 ens20
+.fi
+.PP
+Inspect overlay traffic:
+.PP
+.nf
+sudo tcpdump \-eni ens19 'arp or net 172.23.0.0/16'
+sudo tcpdump \-eni ens20 'arp or net 172.23.0.0/16'
+.fi
+.SH RECOVERY
+After a legacy-mode crash, verify the interface names and ownership of
+attachments before removing them:
+.PP
+.nf
+sudo ip link set dev ens19 xdpgeneric off
+sudo ip link set dev ens20 xdpgeneric off
+sudo tc filter del dev ens19 egress protocol all pref 1 handle 1 bpf
+sudo tc filter del dev ens20 egress protocol all pref 1 handle 1 bpf
+.fi
+.PP
+Do not delete clsact blindly; inspect both ingress and egress filters first.
+.SH LIMITATIONS
+Windows DNET2 wire compatibility is unverified.
+DNET2 sequence headers and RX duplicate suppression are not implemented.
+Packets arriving on both LANs may be delivered twice, including UDP.
+TAP mode does not transport IPv6 or VLAN-tagged frames; use VLAN
+subinterfaces for A/B when needed.
+.PP
+Linux may answer ARP for a local address on other interfaces.
+If necessary, configure arp_ignore=1 on A/B through the normal sysctl setup.
+.SH FILES
+.TP
+.I /etc/dnet2/dnet2.conf
+Settings for the supplied systemd service.
+.TP
+.I /etc/systemd/system/dnet2.service
+Installed service unit.
+.TP
+.I /dev/net/tun
+TUN/TAP device used in virtual adapter mode.
+.SH SEE ALSO
+.BR dnet2.conf (5),
+.BR ip (8),
+.BR tc (8),
+.BR tcpdump (8),
+.BR systemctl (1)
